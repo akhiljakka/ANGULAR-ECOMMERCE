@@ -1,0 +1,22 @@
+
+<!--
+container to inhect the -->
+
+<div class="form-header">
+    <button class="btn btn-outline-primary" style="background-color: #205B8D;color: white  ;"   *ngIf="!(_auth.isAuthenticated$ | async)"
+    (click) = "_auth.loginWithPopup()">
+         Login
+    </button>
+    <button class="btn btn-outline-danger" *ngIf="(_auth.isAuthenticated$ | async)"
+    (click)="_auth.logout()">
+         Log out
+    </button>
+    <button class="myButton"  *ngIf="(_auth.isAuthenticated$ | async)"
+    routerLink="/members">
+         Member
+    </button>
+    <button class="myButton"  *ngIf="(_auth.isAuthenticated$ | async)"
+    routerLink="/order-history">
+         Orders
+    </button>
+</div>  
