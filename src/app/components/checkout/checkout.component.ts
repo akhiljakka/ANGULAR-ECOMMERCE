@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { Country } from 'src/app/common/country';
 import { Order } from 'src/app/common/order';
 import { OrderItem } from 'src/app/common/order-item';
+import { PaymentInfo } from 'src/app/common/payment-info';
 import { Purchase } from 'src/app/common/purchase';
 import { State } from 'src/app/common/state';
 
@@ -12,6 +13,7 @@ import { CardvalidateService } from 'src/app/services/cardvalidate.service';
 import { CartService } from 'src/app/services/cart.service';
 import { CheckoutService } from 'src/app/services/checkout.service';
 import { WhiteSpaceValidation } from 'src/app/validators/white-space-validation';
+import { environment } from 'src/environments/environment';
 
 @Component({
   selector: 'app-checkout',
@@ -24,6 +26,12 @@ storage: Storage =sessionStorage;
 
   totalPrice: number = 0;
   totalQuantity: number = 0;
+
+  //init stripe api
+  stripe = Stripe(environment.stripePublishableKey);
+paymentInfo:PaymentInfo=new PaymentInfo();
+cardElements:any;
+displayErrors:any;
   
   creditCardYears: number[] = [];
   creditCardMonths: number[] = [];
@@ -41,6 +49,9 @@ storage: Storage =sessionStorage;
         private router: Router) { }
 
   ngOnInit(): void {
+
+    //set up stripe payment
+    this.setupStripePaymentForm();
     
       const theEmail = JSON.parse(this.storage.getItem('userEmail')!);
       this.cartService.totalPrice.subscribe(
@@ -89,19 +100,25 @@ storage: Storage =sessionStorage;
           WhiteSpaceValidation.notOnlyWhitespace])
       }),
       creditCard: this.formBuilder.group({
+
+
+
+
+
+        /*
         cardType: new FormControl('', [Validators.required]),
         nameOnCard:  new FormControl('', [Validators.required, Validators.minLength(2), 
           WhiteSpaceValidation.notOnlyWhitespace]),
         cardNumber: new FormControl('', [Validators.required, Validators.pattern('[0-9]{16}')]),
         securityCode: new FormControl('', [Validators.required, Validators.pattern('[0-9]{3}')]),
         expirationMonth: [''],
-        expirationYear: ['']
+        expirationYear: ['']*/
       })
     });
 
     // populate credit card months
 
-    const startMonth: number = new Date().getMonth() + 1;
+   /* const startMonth: number = new Date().getMonth() + 1;
     console.log("startMonth: " + startMonth);
 
     this.luv2ShopFormService.getCreditCardMonths(startMonth).subscribe(
@@ -118,7 +135,7 @@ storage: Storage =sessionStorage;
         console.log("Retrieved credit card years: " + JSON.stringify(data));
         this.creditCardYears = data;
       }
-    );
+    );*/
 
     // populate countries
 
@@ -128,6 +145,29 @@ storage: Storage =sessionStorage;
         this.countries = data;
       }
     );
+  }
+  setupStripePaymentForm() {
+    // get a handle to stripe elements
+
+    var elements = this.stripe.elements();
+    
+    // create a card elements
+this.cardElements = elements.create('card',{hidePostalCode:true});
+    // Add n instance of card UI component into 'card-element' div
+    this.cardElements.mount('#card-element');
+
+    //Add event binding
+    this.cardElements.on('change',(event:any)=>{
+      this.displayErrors = document.getElementById('card-errors');
+
+      if(event.complete){
+        this.displayErrors.textContent = "";
+
+      } else if (event.error){
+        this.displayErrors.textContent=event.error.message;
+      }
+    })
+
   }
 
   get firstName() { return this.checkoutFormGroup.get('customer.firstName'); }
@@ -217,8 +257,11 @@ const cartItems = this.cartService.cartItems;
     purchase.order=order;
     purchase.orderItems=orderItems;
 
+    //compute total amount
+    this.paymentInfo.amount=this.totalPrice*100;
+    this.paymentInfo.currency="USD";
     //call rest api 
-    this.checkOutService.placeOrder(purchase).subscribe(
+    /*this.checkOutService.placeOrder(purchase).subscribe(
       {
         next: response =>{
           alert(` your order has been received.\n order tracking number : ${response.orderTrackingNumber}`);
@@ -231,8 +274,51 @@ const cartItems = this.cartService.cartItems;
         }
         
       }
-    );
+    );*/
   
+    // if valid form then 
+
+    // create payment intent
+
+    // confirm card payment
+
+    // place order
+
+    if (!this.checkoutFormGroup.invalid && this.displayErrors.textContent===""){
+      this.checkOutService.createPaymentIntent(this.paymentInfo).subscribe(
+        (paymentIntentResponse)=>{
+          this.stripe.confirmCardPayment(paymentIntentResponse.client_secret,{
+            payment_method:
+            {
+              card:this.cardElements
+            }
+          },{handleActions: false})
+          .then((result:any)=>
+          {
+            if(result.error){
+              // there is an error
+              alert(`There was an error :${result.error.message}`);
+            } else {
+              //call REST API
+              this.checkOutService.placeOrder(purchase).subscribe(
+                {
+                  next: (response:any)=> {
+                    alert(`Your order is recived \norder tracking number: ${response.orderTrackingNumber}`);
+                    this.resetCart();
+                  },
+                  error:(err:any)=>{
+                    alert(`There was an error: ${err.message}`);
+                  }
+                }
+              )
+            }
+          })
+        }
+      );
+    } else {
+      this.checkoutFormGroup.markAllAsTouched();
+      return;
+    }
   }
   resetCart() {
     //reset cart data
