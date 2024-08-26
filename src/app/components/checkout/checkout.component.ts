@@ -26,7 +26,7 @@ storage: Storage =sessionStorage;
 
   totalPrice: number = 0;
   totalQuantity: number = 0;
-
+  isDisabled: boolean =false;
   //init stripe api
   stripe = Stripe(environment.stripePublishableKey);
 paymentInfo:PaymentInfo=new PaymentInfo();
@@ -258,8 +258,10 @@ const cartItems = this.cartService.cartItems;
     purchase.orderItems=orderItems;
 
     //compute total amount
-    this.paymentInfo.amount=this.totalPrice*100;
+    this.paymentInfo.amount=Math.round(this.totalPrice*100) ;
     this.paymentInfo.currency="USD";
+    console.log(`this.paymentInfo: ${this.paymentInfo.amount}`);
+    this.paymentInfo.receiptEmail=purchase.customer?.email;
     //call rest api 
     /*this.checkOutService.placeOrder(purchase).subscribe(
       {
@@ -285,12 +287,25 @@ const cartItems = this.cartService.cartItems;
     // place order
 
     if (!this.checkoutFormGroup.invalid && this.displayErrors.textContent===""){
+      this.isDisabled=true;
       this.checkOutService.createPaymentIntent(this.paymentInfo).subscribe(
         (paymentIntentResponse)=>{
           this.stripe.confirmCardPayment(paymentIntentResponse.client_secret,{
             payment_method:
             {
-              card:this.cardElements
+              card:this.cardElements,
+              billing_details: {
+                email: purchase.customer?.email,
+                name: `${purchase.customer?.firstName} ${purchase.customer?.lastName}`,
+                address:{
+                  line1:purchase.billingAddress?.street,
+                  city:purchase.billingAddress?.city,
+                  state:purchase.billingAddress?.state,
+                  postal_code:purchase.billingAddress?.zipCode,
+                  country: this.billingAddressCountry?.value.code
+
+                }
+              }
             }
           },{handleActions: false})
           .then((result:any)=>
@@ -298,6 +313,7 @@ const cartItems = this.cartService.cartItems;
             if(result.error){
               // there is an error
               alert(`There was an error :${result.error.message}`);
+              this.isDisabled=false;
             } else {
               //call REST API
               this.checkOutService.placeOrder(purchase).subscribe(
@@ -305,9 +321,11 @@ const cartItems = this.cartService.cartItems;
                   next: (response:any)=> {
                     alert(`Your order is recived \norder tracking number: ${response.orderTrackingNumber}`);
                     this.resetCart();
+                    this.isDisabled=false;
                   },
                   error:(err:any)=>{
                     alert(`There was an error: ${err.message}`);
+                    this.isDisabled=false;
                   }
                 }
               )
@@ -319,12 +337,14 @@ const cartItems = this.cartService.cartItems;
       this.checkoutFormGroup.markAllAsTouched();
       return;
     }
+
   }
   resetCart() {
     //reset cart data
     this.cartService.cartItems=[];
     this.cartService.totalPrice.next(0);
     this.cartService.totalQuantity.next(0);
+    this.cartService.persistsCartItems();
     //reset the form
     this.checkoutFormGroup.reset();
     //navigate back to home  product page

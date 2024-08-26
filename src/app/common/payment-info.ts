@@ -1,6 +1,7 @@
 export class PaymentInfo {
-    constructor(
-        public amount?:number,
-        public currency?:string
-    ){}
+   
+          amount:number | undefined ;
+          currency:string | undefined;
+         receiptEmail:string | undefined;
+   
 }
